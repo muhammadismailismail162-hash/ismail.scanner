@@ -1,24 +1,25 @@
+
 import socket
+from concurrent.futures import ThreadPoolExecutor
 
-def check_port(host, port):
-    # Create a socket object using TCP
+def check_port(ip, port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    
-    # Set a timeout so the script doesn't hang
-    s.settimeout(2)
-    
+    s.settimeout(0.5) # Fast timeout for speed
     try:
-        # Attempt to connect to the host and port
-        result = s.connect_ex((host, port))
-        if result == 0:
-            print(f"Port {port} is OPEN")
-        else:
-            print(f"Port {port} is CLOSED")
+        if s.connect_ex((ip, port)) == 0:
+            print(f"[+] Port {port} is OPEN")
         s.close()
-    except Exception as e:
-        print(f"Could not connect: {e}")
+    except:
+        pass
 
-# Example usage (Testing your own localhost)
-target_ip = "127.0.0.1" 
-target_port = 80
-check_port(target_ip, target_port)
+def main():
+    target = input("Enter target IP (e.g., 192.168.1.1): ")
+    print(f"Scanning {target} from port 1 to 60000...")
+
+    # Using ThreadPoolExecutor to run 500 checks at a time
+    with ThreadPoolExecutor(max_workers=500) as executor:
+        for port in range(1, 60001):
+            executor.submit(check_port, target, port)
+
+if __name__ == "__main__":
+    main()
