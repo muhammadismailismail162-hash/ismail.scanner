@@ -1,48 +1,67 @@
 
-import nmap
+import socket
+import concurrent.futures
+from datetime import datetime
 
-def scan_target_services():
-    # Initialize the scanner
-    nm = nmap.PortScanner()
-    
-    # 1. Ask for Target
-    print("--- Service Specific Scanner ---")
-    target = input("Enter Target IP or Subnet (e.g., 192.168.1.1 or 192.168.1.0/24): ")
-    
-    # Define ports for: FTP(21), SSH(22), NetBIOS(137-139), SMB(445)
-    target_ports = '21,22,137,138,139,445'
-    
-    print(f"\nStarting targeted scan on {target} for ports {target_ports}...")
-    
-    # -sV: Service version detection
-    # -sC: Default Nmap scripts (very useful for SMB/NetBIOS info)
+# Formatting Constants
+YELLOW = "\033[1;93m"
+GREEN = "\033[1;92m"
+RED = "\033[91m"
+RESET = "\033[0m"
+
+def scan_port(target_ip, port):
+    """Checks a single port and returns its status."""
     try:
-        nm.scan(hosts=target, ports=target_ports, arguments='-sV -sC')
-    except Exception as e:
-        print(f"Error running scan: {e}")
-        return
-
-    # 2. Process Results
-    for host in nm.all_hosts():
-        print(f"\nHost : {host} ({nm[host].hostname()})")
-        print(f"State: {nm[host].state()}")
+        # Create a TCP socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1.0) # 1 second timeout for accuracy
         
-        for proto in nm[host].all_protocols():
-            print(f"Protocol : {proto.upper()}")
+        # connect_ex returns 0 for success (Open)
+        result = s.connect_ex((target_ip, port))
+        
+        if result == 0:
+            return f"Port {port}: {GREEN}OPEN{RESET}"
+        elif result == 11 or result == 10060: # Timeout codes
+            return f"Port {port}: {YELLOW}FILTERED{RESET}"
+        else:
+            # Uncomment the line below if you want to see closed ports
+            # return f"Port {port}: CLOSED"
+            return None
+        s.close()
+    except:
+        return None
+
+def main():
+    # The requested yellow branding
+    print("-" * 50)
+    print(f"Initializing Scanner: {YELLOW}Ismail{RESET}")
+    print("-" * 50)
+
+    target = input("Enter target website or IP: ").strip()
+    
+    try:
+        target_ip = socket.gethostbyname(target)
+        print(f"Scanning Target: {target} ({target_ip})")
+        print(f"Time started: {datetime.now()}")
+        print("-" * 50)
+
+        # Using ThreadPoolExecutor to scan ports 1-6000 simultaneously
+        with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+            # Map the scan_port function across the range of ports
+            futures = [executor.submit(scan_port, target_ip, port) for port in range(1, 6001)]
             
-            ports = nm[host][proto].keys()
-            for port in sorted(ports):
-                state = nm[host][proto][port]['state']
-                service = nm[host][proto][port]['name']
-                product = nm[host][proto][port].get('product', '')
-                version = nm[host][proto][port].get('version', '')
-                
-                print(f"  [Port {port}] Status: {state} | Service: {service} ({product} {version})")
-                
-                # Print extra script output (e.g., SMB share names, SSH host keys)
-                if 'script' in nm[host][proto][port]:
-                    for script_id, output in nm[host][proto][port]['script'].items():
-                        print(f"    |_ {script_id}: {output.strip()}")
+            for future in concurrent.futures.as_completed(futures):
+                res = future.result()
+                if res: # Only print if the port was Open or Filtered
+                    print(res)
+
+    except socket.gaierror:
+        print(f"{RED}Error: Hostname could not be resolved.{RESET}")
+    except KeyboardInterrupt:
+        print(f"\n{RED}Scan halted by user.{RESET}")
+
+    print("-" * 50)
+    print("Scan Complete.")
 
 if __name__ == "__main__":
-    scan_target_services()
+    main()
