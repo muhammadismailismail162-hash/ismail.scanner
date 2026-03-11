@@ -1,44 +1,48 @@
 
-
 import nmap
 
-def scan_specific_services(target):
+def scan_target_services():
+    # Initialize the scanner
     nm = nmap.PortScanner()
     
-    # Defining the specific ports:
-    # 21 (FTP), 22 (SSH), 137-139 (NetBIOS), 445 (SMB)
-    ports = '21,22,137,138,139,445'
+    # 1. Ask for Target
+    print("--- Service Specific Scanner ---")
+    target = input("Enter Target IP or Subnet (e.g., 192.168.1.1 or 192.168.1.0/24): ")
     
-    print(f"--- Starting targeted scan on {target} ---")
+    # Define ports for: FTP(21), SSH(22), NetBIOS(137-139), SMB(445)
+    target_ports = '21,22,137,138,139,445'
     
-    # -sV: Version detection
-    # -sC: Run default Nmap scripts
-    nm.scan(target, ports, arguments='-sV -sC')
+    print(f"\nStarting targeted scan on {target} for ports {target_ports}...")
     
-    if target not in nm.all_hosts():
-        print("Target appears to be down or unreachable.")
+    # -sV: Service version detection
+    # -sC: Default Nmap scripts (very useful for SMB/NetBIOS info)
+    try:
+        nm.scan(hosts=target, ports=target_ports, arguments='-sV -sC')
+    except Exception as e:
+        print(f"Error running scan: {e}")
         return
 
-    host = nm[target]
-    print(f"\nHost Status: {host.state()}")
-
-    for proto in host.all_protocols():
-        print(f"\nProtocol: {proto.upper()}")
-        lport = host[proto].keys()
+    # 2. Process Results
+    for host in nm.all_hosts():
+        print(f"\nHost : {host} ({nm[host].hostname()})")
+        print(f"State: {nm[host].state()}")
         
-        for port in sorted(lport):
-            state = host[proto][port]['state']
-            service = host[proto][port]['name']
-            product = host[proto][port].get('product', 'N/A')
-            extrainfo = host[proto][port].get('extrainfo', '')
+        for proto in nm[host].all_protocols():
+            print(f"Protocol : {proto.upper()}")
             
-            print(f"[{port}] {service: <10} Status: {state: <8} Info: {product} {extrainfo}")
-            
-            # Print script output if available (useful for SMB/NetBIOS)
-            if 'script' in host[proto][port]:
-                for script_id, result in host[proto][port]['script'].items():
-                    print(f"  |_ {script_id}: {result.strip()}")
+            ports = nm[host][proto].keys()
+            for port in sorted(ports):
+                state = nm[host][proto][port]['state']
+                service = nm[host][proto][port]['name']
+                product = nm[host][proto][port].get('product', '')
+                version = nm[host][proto][port].get('version', '')
+                
+                print(f"  [Port {port}] Status: {state} | Service: {service} ({product} {version})")
+                
+                # Print extra script output (e.g., SMB share names, SSH host keys)
+                if 'script' in nm[host][proto][port]:
+                    for script_id, output in nm[host][proto][port]['script'].items():
+                        print(f"    |_ {script_id}: {output.strip()}")
 
-# Usage
-target_ip = "192.168.1.1" # Change this to your target
-scan_specific_services(target_ip)
+if __name__ == "__main__":
+    scan_target_services()
